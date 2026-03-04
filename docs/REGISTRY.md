@@ -100,6 +100,11 @@
   {:ok? false :error {:code :provider-missing}})
 ```
 
+Поведение:
+- Если `provider-id` не keyword, бросает `ex-info` с `:reason :invalid-argument`.
+- Если `registry` невалиден, бросает `ex-info` с `:reason :invalid-registry`.
+- Если provider отсутствует, возвращает `nil`.
+
 ### 4.4 `require-provider`
 
 Зачем нужна:
@@ -216,3 +221,65 @@
 ;; app startup-check
 (rpr/assert-requirements! registry)
 ```
+
+## 7. Как читать поля `input` / `output` / `errors` / `error_behavior`
+
+Эти поля живут в модульном контракте (`CONTRACT.md`, блок `read_providers`) и
+нужны для согласованности между consumer и provider.
+
+`input`:
+- Зачем: фиксирует вход provider, чтобы consumer передавал предсказуемый payload.
+- Когда использовать: всегда в `provides`.
+- Значение: непосредственное inline-описание аргумента вызова функции.
+
+`output`:
+- Зачем: фиксирует успешный результат provider.
+- Когда использовать: всегда в `provides`.
+- Значение: непосредственное inline-описание результата вызова функции.
+- Если `nil` является валидным результатом (например not-found), это явно
+  описывается в `output`.
+
+`errors`:
+- Зачем: фиксирует, какие контролируемые ошибки consumer обязан обработать.
+- Когда использовать: всегда в `provides`.
+- Значение: список кодов ошибок, минимум рекомендуется из:
+  `invalid-arg`, `not-found`, `forbidden`, `timeout`, `unavailable`, `internal`.
+
+`error_behavior`:
+- Зачем: фиксирует, как именно provider сигнализирует ошибку.
+- Когда использовать: всегда в `provides`.
+- Значения:
+  - `mode: return` — ошибки возвращаются значением;
+  - `mode: throw` — ошибки сигнализируются исключениями;
+  - `mode: mixed` — поддерживаются оба канала.
+- Для `return`/`mixed` указывается `return_error_shape`.
+- Для `throw`/`mixed` указывается `throw_types`.
+
+## 8. Поведение provider при ошибках и исключениях
+
+Контракт должен явно фиксировать режим:
+`error_behavior.mode = return | throw | mixed`.
+
+`return` (ошибка как значение):
+
+```clojure
+{:ok? false
+ :error {:code :not-found
+         :message "user not found"
+         :retryable? false}}
+```
+
+`throw` (ошибка как исключение):
+
+```clojure
+(throw (ex-info "provider unavailable" {:code :unavailable}))
+```
+
+`mixed`:
+- часть ошибок возвращается значением;
+- часть ошибок выбрасывается исключением;
+- правило разделения должно быть явно описано в контракте/документации модуля.
+
+Ключевой принцип:
+- библиотека не навязывает один способ обработки ошибок;
+- но модуль обязан задекларировать выбранное поведение явно.
